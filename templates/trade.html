@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}#{{ trade.id }} {{ trade.symbol }} — Trade Journal{% endblock %}
+
+{% block content %}
+
+<!-- ── Навигация назад ── -->
+<div style="margin-bottom:16px">
+  <a href="{{ url_for('index') }}" class="btn btn-back">← Все сделки</a>
+</div>
+
+<!-- ── Заголовок ── -->
+<div class="section-header" style="margin-bottom:20px">
+  <h1>
+    #{{ trade.id }}
+    <strong>{{ trade.symbol }}</strong>
+    <span class="muted" style="font-weight:400; font-size:14px">
+      {{ trade.date }} {{ trade.time }}
+    </span>
+  </h1>
+  <!-- Бейдж статуса -->
+  {% if trade.status == 'open' %}
+    <span class="badge badge-open">● Открыта</span>
+  {% elif trade.result_r and trade.result_r > 0 %}
+    <span class="badge badge-win">Победа</span>
+  {% elif trade.result_r and trade.result_r < 0 %}
+    <span class="badge badge-loss">Убыток</span>
+  {% else %}
+    <span class="badge badge-closed">Закрыта</span>
+  {% endif %}
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Баннер результата (только для закрытых)
+════════════════════════════════════════════ -->
+{% if trade.status == 'closed' and trade.result_r is not none %}
+<div class="result-banner {{ 'win' if trade.result_r > 0 else 'loss' }}">
+  <div>
+    <div class="label">Результат</div>
+    <div class="big {{ 'green' if trade.result_r > 0 else 'red' }}">
+      {{ trade.result_r | r_fmt }}
+    </div>
+  </div>
+  <div>
+    <div class="label">P&amp;L</div>
+    <div class="big {{ 'green' if trade.result_usd > 0 else 'red' }}">
+      {% if trade.result_usd >= 0 %}+{% endif %}{{ trade.result_usd | usd }}
+    </div>
+  </div>
+  <div>
+    <div class="label">Цена выхода</div>
+    <div class="big">{{ trade.exit_price | usd }}</div>
+  </div>
+  <div>
+    <div class="label">Тип выхода</div>
+    <div class="big" style="font-size:16px; text-transform:uppercase; letter-spacing:0.5px">
+      {{ trade.exit_type or '—' }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══════════════════════════════════════════
+     Раздел 1: Параметры входа
+════════════════════════════════════════════ -->
+<h2>Параметры входа</h2>
+<div class="params-grid">
+
+  <div class="param-item">
+    <div class="param-label">Цена входа</div>
+    <div class="param-value">{{ trade.entry_price | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Уровень пробоя</div>
+    <div class="param-value">{{ trade.breakout_level | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Стоп-лосс</div>
+    <div class="param-value red">
+      {{ trade.stop_price | usd }}
+      <span class="muted" style="font-size:12px">({{ trade.stop_distance_pct | pct }})</span>
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">ATR (14, 1H)</div>
+    <div class="param-value">{{ trade.atr | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">TP1 (+2R)</div>
+    <div class="param-value green">{{ trade.tp1 | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">TP2 (+4R)</div>
+    <div class="param-value green">{{ trade.tp2 | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Трейлинг (runner)</div>
+    <div class="param-value">{{ trade.trailing_pct | pct }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Плечо</div>
+    <div class="param-value">×{{ trade.leverage }}</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Раздел 2: Позиция и риск
+════════════════════════════════════════════ -->
+<h2>Позиция и риск</h2>
+<div class="params-grid">
+
+  <div class="param-item">
+    <div class="param-label">Условная стоимость</div>
+    <div class="param-value">{{ trade.position_notional | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Маржа</div>
+    <div class="param-value">{{ trade.required_margin | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Риск ($)</div>
+    <div class="param-value red">{{ trade.risk_amount | usd }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Риск (%)</div>
+    <div class="param-value red">{{ trade.risk_pct | pct }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Объём всего (qty)</div>
+    <div class="param-value">{{ trade.qty_total }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">TP1 qty (30%)</div>
+    <div class="param-value">{{ trade.qty_tp1 }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">TP2 qty (30%)</div>
+    <div class="param-value">{{ trade.qty_tp2 }}</div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Runner qty (40%)</div>
+    <div class="param-value">{{ trade.qty_runner }}</div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Раздел 3: Фильтры входа
+════════════════════════════════════════════ -->
+<h2>Условия входа (фильтры)</h2>
+<div class="params-grid">
+
+  <div class="param-item">
+    <div class="param-label">BTC-режим</div>
+    <div class="param-value" style="font-size:12px; word-break:break-word; white-space:normal">
+      {% if trade.btc_regime and 'OK' in trade.btc_regime %}
+        <span class="green">{{ trade.btc_regime }}</span>
+      {% else %}
+        <span class="red">{{ trade.btc_regime or '—' }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Объём 24H</div>
+    <div class="param-value">
+      {% if trade.volume_24h %}
+        ${{ '%.1f'|format(trade.volume_24h / 1e6) }}M
+      {% else %}—{% endif %}
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Open Interest</div>
+    <div class="param-value">
+      {% if trade.open_interest %}
+        ${{ '%.1f'|format(trade.open_interest / 1e6) }}M
+      {% else %}—{% endif %}
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Спред</div>
+    <div class="param-value">
+      {% if trade.spread is not none %}
+        {{ '%.4f'|format(trade.spread) }}%
+      {% else %}—{% endif %}
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">Funding Rate (8H)</div>
+    <div class="param-value {{ 'red' if trade.funding_rate and trade.funding_rate | abs > 0.0005 else '' }}">
+      {% if trade.funding_rate is not none %}
+        {{ '%.4f'|format(trade.funding_rate * 100) }}%
+      {% else %}—{% endif %}
+    </div>
+  </div>
+
+  <div class="param-item">
+    <div class="param-label">ID ордера входа</div>
+    <div class="param-value muted" style="font-size:11px; word-break:break-all">
+      {{ trade.entry_order_id or '—' }}
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Раздел 4: Заметки
+════════════════════════════════════════════ -->
+<hr class="divider">
+<div class="notes-section">
+  <h3>Заметки</h3>
+  <form action="{{ url_for('save_notes', trade_id=trade.id) }}" method="post">
+    <textarea name="notes" placeholder="Добавьте заметку: причина входа, наблюдения, ошибки...">{{ trade.notes or '' }}</textarea>
+    <div style="margin-top: 8px">
+      <button type="submit" class="btn btn-primary">Сохранить заметку</button>
+    </div>
+  </form>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Авто-обновление для открытых сделок
+════════════════════════════════════════════ -->
+{% if trade.status == 'open' %}
+<hr class="divider">
+<div id="live-block" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px">
+  <div class="section-header" style="margin-bottom:8px">
+    <span class="live-dot"></span>
+    <strong>Live данные</strong>
+    <span class="muted" style="font-size:12px">обновление каждые 30с</span>
+  </div>
+  <div style="display:flex; gap:32px; flex-wrap:wrap">
+    <div>
+      <div class="param-label">Текущая цена</div>
+      <div id="live-price" class="param-value">—</div>
+    </div>
+    <div>
+      <div class="param-label">Unrealized P&amp;L</div>
+      <div id="live-unr" class="param-value">—</div>
+    </div>
+    <div>
+      <div class="param-label">Последнее обновление</div>
+      <div id="live-time" class="param-value muted" style="font-size:12px">—</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if trade.status == 'open' %}
+<script>
+  function refreshLive() {
+    fetch('/api/live')
+      .then(r => r.json())
+      .then(data => {
+        const t = data.find(x => x.id === {{ trade.id }});
+        if (!t) return;
+
+        document.getElementById('live-price').textContent = '$' + t.price.toFixed(4);
+
+        const unrEl  = document.getElementById('live-unr');
+        const sign   = t.unrealized >= 0 ? '+' : '';
+        unrEl.textContent = sign + '$' + t.unrealized.toFixed(2);
+        unrEl.className   = 'param-value ' + (t.unrealized >= 0 ? 'green' : 'red');
+
+        const now = new Date();
+        document.getElementById('live-time').textContent =
+          now.toLocaleTimeString('ru-RU');
+      })
+      .catch(() => {});
+  }
+
+  refreshLive();
+  setInterval(refreshLive, 30000);
+</script>
+{% endif %}
+{% endblock %}

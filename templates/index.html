@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Trade Journal — Все сделки{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════════════════════════════════
+     Заголовок
+════════════════════════════════════════════ -->
+<div class="section-header">
+  <h1>Журнал сделок</h1>
+  {% if stats.open_count > 0 %}
+    <span class="live-hint">
+      <span class="live-dot"></span>
+      {{ stats.open_count }} открытых — авто-обновление каждые 30с
+    </span>
+  {% endif %}
+</div>
+
+<!-- ═══════════════════════════════════════════
+     Блок статистики
+════════════════════════════════════════════ -->
+{% if stats.total_closed > 0 %}
+<div class="stats-grid">
+
+  <div class="stat-card">
+    <div class="stat-label">Win Rate</div>
+    <div class="stat-value {% if stats.win_rate >= 50 %}green{% else %}red{% endif %}">
+      {{ '%.1f'|format(stats.win_rate) }}%
+    </div>
+    <div class="stat-sub">{{ stats.wins }}В / {{ stats.losses }}П из {{ stats.total_closed }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Avg R</div>
+    <div class="stat-value {{ stats.avg_r | sign_class }}">
+      {{ stats.avg_r | r_fmt }}
+    </div>
+    <div class="stat-sub">средний результат</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Profit Factor</div>
+    <div class="stat-value {% if stats.profit_factor >= 1 %}green{% else %}red{% endif %}">
+      {{ stats.profit_factor_str }}
+    </div>
+    <div class="stat-sub">прибыль / убыток</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Max Drawdown</div>
+    <div class="stat-value red">
+      -{{ stats.max_drawdown | usd }}
+    </div>
+    <div class="stat-sub">пик → дно (cumulative)</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Итого P&L</div>
+    <div class="stat-value {{ stats.total_pnl | sign_class }}">
+      {% if stats.total_pnl >= 0 %}+{% endif %}{{ stats.total_pnl | usd }}
+    </div>
+    <div class="stat-sub">все закрытые</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Сделок</div>
+    <div class="stat-value">{{ stats.total_closed }}</div>
+    <div class="stat-sub">
+      {% if stats.open_count %}{{ stats.open_count }} открытых{% else %}нет открытых{% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Разбивка по типу выхода -->
+{% if stats.exit_types %}
+<div class="exit-pills">
+  {% for exit_type, count in stats.exit_types.items() | sort %}
+    <div class="exit-pill">
+      {{ exit_type }}: <strong>{{ count }}</strong>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% else %}
+<p class="muted" style="margin-bottom:24px">Нет закрытых сделок для подсчёта статистики.</p>
+{% endif %}
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════
+     Таблица сделок
+════════════════════════════════════════════ -->
+{% if trades %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Дата</th>
+      <th>Символ</th>
+      <th>Вход</th>
+      <th>Стоп</th>
+      <th>TP1 / TP2</th>
+      <th>Позиция</th>
+      <th>Статус</th>
+      <th>Цена / Выход</th>
+      <th>P&amp;L $</th>
+      <th>R</th>
+      <th>Тип выхода</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in trades %}
+    {# Определяем класс строки по статусу/результату #}
+    {% if t.status == 'open' %}
+      {% set row_class = 'row-open' %}
+    {% elif t.result_r and t.result_r > 0 %}
+      {% set row_class = 'row-win' %}
+    {% elif t.result_r and t.result_r < 0 %}
+      {% set row_class = 'row-loss' %}
+    {% else %}
+      {% set row_class = '' %}
+    {% endif %}
+
+    <tr class="{{ row_class }}" id="trade-row-{{ t.id }}">
+
+      <!-- ID -->
+      <td><a href="{{ url_for('trade_detail', trade_id=t.id) }}">#{{ t.id }}</a></td>
+
+      <!-- Дата -->
+      <td class="muted">{{ t.date or '—' }}</td>
+
+      <!-- Символ -->
+      <td><strong>{{ t.symbol }}</strong></td>
+
+      <!-- Вход -->
+      <td>{{ t.entry_price | usd }}</td>
+
+      <!-- Стоп % -->
+      <td class="red">{{ t.stop_distance_pct | pct }}</td>
+
+      <!-- TP1 / TP2 -->
+      <td class="muted">
+        {{ t.tp1 | usd }} /
+        {{ t.tp2 | usd }}
+      </td>
+
+      <!-- Позиция (условная стоимость) -->
+      <td>{{ t.position_notional | usd }}</td>
+
+      <!-- Статус -->
+      <td>
+        {% if t.status == 'open' %}
+          <span class="badge badge-open">● Открыта</span>
+        {% elif t.result_r and t.result_r > 0 %}
+          <span class="badge badge-win">Победа</span>
+        {% else %}
+          <span class="badge badge-closed">Закрыта</span>
+        {% endif %}
+      </td>
+
+      <!-- Цена текущая (open) / цена выхода (closed) -->
+      <td id="price-{{ t.id }}">
+        {% if t.status == 'open' %}
+          <span class="muted">—</span>
+        {% else %}
+          {{ t.exit_price | usd }}
+        {% endif %}
+      </td>
+
+      <!-- P&L $ -->
+      <td id="pnl-{{ t.id }}" class="{{ t.result_usd | sign_class }}">
+        {% if t.result_usd is not none %}
+          {% if t.result_usd >= 0 %}+{% endif %}{{ t.result_usd | usd }}
+        {% elif t.status == 'open' %}
+          <span class="muted" id="unr-{{ t.id }}">—</span>
+        {% else %}
+          <span class="muted">—</span>
+        {% endif %}
+      </td>
+
+      <!-- R -->
+      <td class="{{ t.result_r | sign_class }}">
+        {{ t.result_r | r_fmt }}
+      </td>
+
+      <!-- Тип выхода -->
+      <td class="muted">{{ t.exit_type or '—' }}</td>
+
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% else %}
+<p class="muted">Сделок пока нет. Запустите <code>trade_entry.py</code> для открытия первой сделки.</p>
+{% endif %}
+
+{% endblock %}
+
+<!-- ═══════════════════════════════════════════
+     JavaScript: авто-обновление открытых сделок
+════════════════════════════════════════════ -->
+{% block scripts %}
+{% if stats.open_count > 0 %}
+<script>
+  /**
+   * Опрашивает /api/live каждые 30 секунд.
+   * Обновляет цену и unrealized PnL для открытых сделок без перезагрузки.
+   */
+  function refreshOpenTrades() {
+    fetch('/api/live')
+      .then(r => r.json())
+      .then(data => {
+        data.forEach(t => {
+          const priceEl = document.getElementById('price-' + t.id);
+          const unrEl   = document.getElementById('unr-'   + t.id);
+
+          if (priceEl) {
+            priceEl.textContent = '$' + t.price.toFixed(4);
+          }
+          if (unrEl) {
+            const sign = t.unrealized >= 0 ? '+' : '';
+            unrEl.textContent = sign + '$' + t.unrealized.toFixed(2);
+            unrEl.className   = t.unrealized >= 0 ? 'green' : 'red';
+          }
+        });
+      })
+      .catch(() => { /* тихо игнорируем ошибки сети */ });
+  }
+
+  // Первый запрос сразу при загрузке страницы
+  refreshOpenTrades();
+  // Затем каждые 30 секунд
+  setInterval(refreshOpenTrades, 30000);
+</script>
+{% endif %}
+{% endblock %}

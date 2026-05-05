@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Trade Journal{% endblock %}</title>
+  <style>
+    /* ── Переменные ─────────────────────────────── */
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface2:    #21262d;
+      --border:      #30363d;
+      --text:        #e6edf3;
+      --muted:       #8b949e;
+      --green:       #3fb950;
+      --green-dim:   #1a3a1e;
+      --red:         #f85149;
+      --red-dim:     #3a1a1a;
+      --blue:        #388bfd;
+      --yellow:      #d29922;
+      --accent:      #58a6ff;
+      --radius:      6px;
+    }
+
+    /* ── Сброс и базовые стили ──────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Навигация ──────────────────────────────── */
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; gap: 16px; margin-left: auto; }
+    .nav-links a { color: var(--muted); font-size: 13px; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Основной контейнер ─────────────────────── */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    /* ── Заголовки секций ───────────────────────── */
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+    h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+
+    /* ── Карточки статистики ────────────────────── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    .stat-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Таблицы ────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr.row-win  { background: rgba(63, 185, 80, 0.05); }
+    tbody tr.row-loss { background: rgba(248, 81, 73, 0.05); }
+    tbody tr.row-open { background: rgba(88, 166, 255, 0.04); }
+    tbody tr.row-win:hover  { background: rgba(63, 185, 80, 0.10); }
+    tbody tr.row-loss:hover { background: rgba(248, 81, 73, 0.10); }
+    td {
+      padding: 10px 12px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    /* ── Цвета значений ─────────────────────────── */
+    .green { color: var(--green); }
+    .red   { color: var(--red);   }
+    .muted { color: var(--muted); }
+    .blue  { color: var(--blue);  }
+
+    /* ── Бейджи статуса ─────────────────────────── */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.3px;
+    }
+    .badge-open   { background: rgba(88,166,255,0.15); color: var(--blue);  border: 1px solid rgba(88,166,255,0.3); }
+    .badge-closed { background: var(--surface2);       color: var(--muted); border: 1px solid var(--border); }
+    .badge-win    { background: var(--green-dim);      color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+    .badge-loss   { background: var(--red-dim);        color: var(--red);   border: 1px solid rgba(248,81,73,0.3); }
+
+    /* ── Блок параметров сделки ─────────────────── */
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .param-item {
+      background: var(--surface);
+      padding: 12px 16px;
+    }
+    .param-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .param-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* ── Результат сделки ───────────────────────── */
+    .result-banner {
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .result-banner.win  { background: var(--green-dim); border: 1px solid rgba(63,185,80,0.3); }
+    .result-banner.loss { background: var(--red-dim);   border: 1px solid rgba(248,81,73,0.3); }
+    .result-banner .big { font-size: 28px; font-weight: 700; }
+    .result-banner .label { font-size: 12px; color: var(--muted); }
+
+    /* ── Поле заметок ───────────────────────────── */
+    .notes-section { margin-top: 24px; }
+    .notes-section textarea {
+      width: 100%;
+      min-height: 120px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .notes-section textarea:focus { border-color: var(--blue); }
+    .btn {
+      display: inline-block;
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--blue);    color: #fff; }
+    .btn-back    { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ── Live-обновление ────────────────────────── */
+    .live-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+      margin-right: 4px;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+    .live-hint { font-size: 11px; color: var(--muted); }
+
+    /* ── Exit-type pills ────────────────────────── */
+    .exit-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+    .exit-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .exit-pill strong { color: var(--text); }
+
+    /* ── Section header ─────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-brand">Bull Market <span>Breakout</span> System</div>
+    <div class="nav-links">
+      <a href="/">Журнал</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
