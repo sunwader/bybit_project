@@ -50,6 +50,12 @@ LEVERAGE = int(os.getenv("LEVERAGE", "2"))
 # Комиссия Bybit за лимитный ордер (одна сторона)
 COMMISSION_RATE = 0.00055  # 0.055%
 
+# Анти-памп фильтр: если символ вырос больше чем на этот % за
+# SHORT_PUMP_LOOKBACK_HOURS — считаем это pump-and-dump структурой
+# (рост без накопления), а не классическим пробоем вниз, и пропускаем сделку.
+SHORT_MAX_PUMP_PCT        = float(os.getenv("SHORT_MAX_PUMP_PCT", "0.15"))
+SHORT_PUMP_LOOKBACK_HOURS = int(os.getenv("SHORT_PUMP_LOOKBACK_HOURS", "24"))
+
 # ──────────────────────────────────────────────
 # Логирование
 # ──────────────────────────────────────────────
@@ -321,6 +327,48 @@ def check_btc_bear_filter(session: HTTP) -> tuple[bool, str]:
     return True, msg
 
 
+def check_no_recent_pump(session: HTTP, symbol: str) -> tuple[bool, str]:
+    """
+    Анти-памп фильтр по самому символу (не по BTC).
+
+    Классический пробой вниз происходит после дистрибуции/боковика:
+    цена долго формирует уровень, затем его пробивает. Pump-and-dump —
+    другая структура: резкий вертикальный рост без накопления, а затем
+    такое же резкое падение. Такой откат легко перепутать с "пробоем",
+    но входить в него так же рискованно, как гнаться за уже начавшимся
+    движением — стоп по ATR в этот момент искусственно расширен самим
+    пампом, а не отражает реальную волатильность инструмента.
+
+    Проверяем рост цены символа за последние SHORT_PUMP_LOOKBACK_HOURS
+    часов: если он превышает SHORT_MAX_PUMP_PCT — считаем сетап пампом
+    и блокируем вход, независимо от того, что говорят остальные фильтры.
+    """
+    limit = SHORT_PUMP_LOOKBACK_HOURS + 1
+    df = get_klines(session, symbol, "60", limit=limit)
+
+    if len(df) < limit:
+        return False, (
+            f"Недостаточно 1H-свечей {symbol} для анти-памп проверки "
+            f"({len(df)} < {limit})"
+        )
+
+    price_then = float(df["close"].iloc[0])
+    price_now  = float(df["close"].iloc[-1])
+    pump_pct   = (price_now - price_then) / price_then
+
+    if pump_pct > SHORT_MAX_PUMP_PCT:
+        return False, (
+            f"Памп {pump_pct:+.1%} за {SHORT_PUMP_LOOKBACK_HOURS}ч "
+            f"> порога {SHORT_MAX_PUMP_PCT:.0%} — похоже на pump-and-dump, "
+            f"не классический пробой"
+        )
+
+    return True, (
+        f"Без признаков пампа: {pump_pct:+.1%} за {SHORT_PUMP_LOOKBACK_HOURS}ч "
+        f"(порог {SHORT_MAX_PUMP_PCT:.0%})"
+    )
+
+
 # ══════════════════════════════════════════════
 # Управление ордерами
 # ══════════════════════════════════════════════
@@ -458,6 +506,11 @@ def main() -> None:
     )
     parser.add_argument("symbol",          type=str,   help="Символ (например SOLUSDT)")
     parser.add_argument("breakdown_level", type=float, help="Уровень пробития (поддержка)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Прогнать фильтры и расчёт плана на живых данных, но не размещать ордер",
+    )
     args = parser.parse_args()
 
     symbol          = args.symbol.upper()
@@ -568,6 +621,17 @@ def main() -> None:
     mark   = "✓" if fr_ok else "✗"
     print(f"  [{mark}] Funding rate: {fr_pct:.4%}  (макс: 0.05%)")
     if not fr_ok:
+        all_ok = False
+
+    # Фильтр 6: анти-памп (по символу, не по BTC)
+    try:
+        pump_ok, pump_msg = check_no_recent_pump(session, symbol)
+    except Exception as e:
+        pump_ok, pump_msg = False, f"Ошибка анти-памп проверки: {e}"
+
+    mark = "✓" if pump_ok else "✗"
+    print(f"  [{mark}] Анти-памп:   {pump_msg}")
+    if not pump_ok:
         all_ok = False
 
     # ══════════════════════════════════════════
@@ -700,6 +764,11 @@ def main() -> None:
     if not all_ok:
         print("\n  [!] Один или несколько фильтров не пройдены. Торговля невозможна.")
         log.warning("Сделка отклонена: не пройдены фильтры")
+        sys.exit(0)
+
+    if args.dry_run:
+        print("\n  [DRY-RUN] Ордер не размещается. План сделки выше рассчитан на живых данных.")
+        log.info("Dry-run: план рассчитан, ордер не размещён")
         sys.exit(0)
 
     # ══════════════════════════════════════════
