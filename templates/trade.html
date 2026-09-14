@@ -17,6 +17,12 @@
       {{ trade.date }} {{ trade.time }}
     </span>
   </h1>
+  <!-- Бейдж направления -->
+  {% if (trade.direction or 'long') == 'short' %}
+    <span class="badge badge-short">SHORT</span>
+  {% else %}
+    <span class="badge badge-long">LONG</span>
+  {% endif %}
   <!-- Бейдж статуса -->
   {% if trade.status == 'open' %}
     <span class="badge badge-open">● Открыта</span>
@@ -71,7 +77,9 @@
   </div>
 
   <div class="param-item">
-    <div class="param-label">Уровень пробоя</div>
+    <div class="param-label">
+      {% if (trade.direction or 'long') == 'short' %}Уровень пробития{% else %}Уровень пробоя{% endif %}
+    </div>
     <div class="param-value">{{ trade.breakout_level | usd }}</div>
   </div>
 

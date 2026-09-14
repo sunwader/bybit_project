@@ -166,9 +166,14 @@ class TradeMonitor:
     """
 
     def __init__(self, trade: dict, session: HTTP) -> None:
-        self.trade   = trade
-        self.session = session
-        self.symbol  = trade["symbol"]
+        self.trade     = trade
+        self.session   = session
+        self.symbol    = trade["symbol"]
+        self.direction = trade.get("direction") or "long"
+
+        # Сторона ордера, закрывающего позицию (TP / SL / force-close):
+        # long закрывается Sell'ом, short закрывается Buy'ом.
+        self.exit_side = "Sell" if self.direction == "long" else "Buy"
 
         # Параметры инструмента
         try:
@@ -282,7 +287,7 @@ class TradeMonitor:
         for order in msg.get("data", []):
             if order.get("symbol") != self.symbol:
                 continue
-            if order.get("side") != "Sell":
+            if order.get("side") != self.exit_side:
                 continue
             if order.get("orderStatus") not in ("Filled", "PartiallyFilled"):
                 continue
@@ -478,8 +483,8 @@ class TradeMonitor:
             )
             if resp["retCode"] == 0:
                 for ex in resp["result"]["list"]:
-                    # Ищем последнее Sell-исполнение (закрытие позиции)
-                    if ex.get("side") == "Sell":
+                    # Ищем последнее закрывающее исполнение (Sell для long, Buy для short)
+                    if ex.get("side") == self.exit_side:
                         exit_price_actual = float(ex["execPrice"])
                         break
         except Exception:
@@ -492,8 +497,10 @@ class TradeMonitor:
             exit_type = "trailing_stop"
 
         # Расчёт совокупного P&L
+        # Для short знак движения цены инвертирован: прибыль растёт при падении цены.
         trade = self.trade
         entry = float(trade["entry_price"])
+        sign  = 1.0 if self.direction == "long" else -1.0
         pnl   = 0.0
 
         with self.lock:
@@ -502,13 +509,15 @@ class TradeMonitor:
 
         # Вклад TP1 (30%) — если фаза прошла мимо WATCHING_TP1
         if phase in (PHASE_WATCHING_TP2, PHASE_RUNNER):
-            pnl += (tp1_px - entry) * float(trade["qty_tp1"])
-            log.info(f"  TP1: ({tp1_px:.4f} - {entry:.4f}) × {trade['qty_tp1']} = ${(tp1_px - entry) * trade['qty_tp1']:+.2f}")
+            leg = sign * (tp1_px - entry) * float(trade["qty_tp1"])
+            pnl += leg
+            log.info(f"  TP1: ({tp1_px:.4f} - {entry:.4f}) × {trade['qty_tp1']} × {sign:+.0f} = ${leg:+.2f}")
 
         # Вклад TP2 (30%) — если дошли до runner-фазы
         if phase == PHASE_RUNNER:
-            pnl += (tp2_px - entry) * float(trade["qty_tp2"])
-            log.info(f"  TP2: ({tp2_px:.4f} - {entry:.4f}) × {trade['qty_tp2']} = ${(tp2_px - entry) * trade['qty_tp2']:+.2f}")
+            leg = sign * (tp2_px - entry) * float(trade["qty_tp2"])
+            pnl += leg
+            log.info(f"  TP2: ({tp2_px:.4f} - {entry:.4f}) × {trade['qty_tp2']} × {sign:+.0f} = ${leg:+.2f}")
 
         # Вклад финального закрытия
         if phase == PHASE_WATCHING_TP1:
@@ -518,10 +527,11 @@ class TradeMonitor:
             # Закрылся runner (40%)
             close_qty = float(trade["qty_runner"])
 
-        pnl += (exit_price_actual - entry) * close_qty
+        final_leg = sign * (exit_price_actual - entry) * close_qty
+        pnl += final_leg
         log.info(
-            f"  Финал: ({exit_price_actual:.4f} - {entry:.4f}) × {close_qty} "
-            f"= ${(exit_price_actual - entry) * close_qty:+.2f}"
+            f"  Финал: ({exit_price_actual:.4f} - {entry:.4f}) × {close_qty} × {sign:+.0f} "
+            f"= ${final_leg:+.2f}"
         )
 
         result_r = pnl / float(trade["risk_amount"]) if float(trade["risk_amount"]) > 0 else 0.0
@@ -631,12 +641,13 @@ class TradeMonitor:
             if phase == PHASE_CLOSED:
                 break
 
-            entry    = float(self.trade["entry_price"])
-            stop     = float(self.trade["stop_price"])
-            risk     = entry - stop
+            entry = float(self.trade["entry_price"])
+            stop  = float(self.trade["stop_price"])
+            sign  = 1.0 if self.direction == "long" else -1.0
+            risk  = abs(entry - stop)
 
-            unrealized = (price - entry) * qty
-            r_current  = (price - entry) / risk if risk > 0 else 0
+            unrealized = sign * (price - entry) * qty
+            r_current  = sign * (price - entry) / risk if risk > 0 else 0
 
             funding_note = ""
             if above is not None:
@@ -689,7 +700,7 @@ class TradeMonitor:
             resp = self.session.place_order(
                 category="linear",
                 symbol=self.symbol,
-                side="Sell",
+                side=self.exit_side,
                 orderType="Market",
                 qty=_fmt(qty),
                 reduceOnly=True,
@@ -731,7 +742,7 @@ class TradeMonitor:
         """
         log.info("═" * 55)
         log.info(f"  POSITION MONITOR ЗАПУЩЕН")
-        log.info(f"  Символ: {self.symbol}")
+        log.info(f"  Символ: {self.symbol}  ({self.direction.upper()})")
         log.info(f"  Trade ID: {self.trade['id']}")
         log.info(f"  Вход: ${self.trade['entry_price']:.4f}")
         log.info(f"  SL:   ${self.trade['stop_price']:.4f}")

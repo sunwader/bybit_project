@@ -40,6 +40,7 @@ def init_db() -> None:
 
             -- Основные параметры сделки
             symbol              TEXT NOT NULL,
+            direction           TEXT DEFAULT 'long',   -- 'long' или 'short'
             entry_price         REAL,
             breakout_level      REAL,
             atr                 REAL,
@@ -94,6 +95,13 @@ def init_db() -> None:
         )
         """)
         conn.commit()
+
+        # Миграция для БД, созданных до появления шорт-стратегии
+        try:
+            conn.execute("ALTER TABLE trades ADD COLUMN direction TEXT DEFAULT 'long'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # колонка уже существует
     finally:
         conn.close()
 

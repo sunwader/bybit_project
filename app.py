@@ -1,6 +1,6 @@
 """
 app.py — веб-журнал сделок.
-Bull Market Breakout System.
+Breakout / Breakdown System (long и short).
 
 Flask + SQLite + тёмный HTML/CSS фронтенд.
 
@@ -249,7 +249,8 @@ def api_live():
             for t in sym_trades:
                 entry      = float(t["entry_price"])
                 qty        = float(t["qty_total"])
-                unrealized = (price - entry) * qty
+                sign       = 1.0 if (t.get("direction") or "long") == "long" else -1.0
+                unrealized = sign * (price - entry) * qty
                 result.append({
                     "id":         t["id"],
                     "symbol":     sym,
